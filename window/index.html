@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greedy Art Monitor</title>
+    <style>
+        body {
+            margin: 0; padding: 0;
+            background-color: #222; /* Nền xám để dễ nhìn ảnh trong suốt */
+            background-image: linear-gradient(45deg, #333 25%, transparent 25%), linear-gradient(-45deg, #333 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #333 75%), linear-gradient(-45deg, transparent 75%, #333 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            color: #fff;
+            font-family: 'Segoe UI', monospace;
+            height: 100vh; width: 100vw;
+            display: flex; overflow: hidden;
+        }
+        .viewport {
+            flex: 1; height: 100%;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            position: relative;
+        }
+        .label {
+            position: absolute; top: 0; left: 0;
+            background: rgba(0,0,0,0.8); padding: 15px;
+            width: 100%; box-sizing: border-box;
+            border-bottom: 2px solid #0f0;
+            text-align: center; font-size: 1.5rem; font-weight: bold; color: #0f0;
+            z-index: 10;
+        }
+        img {
+            position: absolute;
+            top: 70px;
+            max-width: 95%; max-height: 90%;
+            width: auto; height: auto;
+            object-fit: contain;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="viewport">
+        <div class="label" id="stats">Waiting for Java...</div>
+        <img id="art" src="latest.svg">
+    </div>
+
+    <script>
+        window.updateDashboard = function(data) {
+            document.getElementById('stats').innerText = 
+                `TRIANGLES: ${data.count} / 1000  |  FIT: ${data.fit.toFixed(4)}%`;
+        };
+
+        setInterval(() => {
+            const t = Date.now();
+            document.getElementById('art').src = 'latest.svg?t=' + t;
+            
+            const oldScript = document.getElementById('data-loader');
+            if (oldScript) oldScript.remove();
+            
+            const script = document.createElement('script');
+            script.id = 'data-loader';
+            script.src = 'dashboard_data.js?t=' + t;
+            document.body.appendChild(script);
+        }, 10); // Cập nhật nhanh (0.5s) vì thuật toán này chạy rất lẹ
+    </script>
+</body>
+</html>

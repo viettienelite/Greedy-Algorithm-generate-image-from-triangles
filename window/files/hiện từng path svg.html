@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local SVG Loader</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
+        /* Container chứa nút bấm */
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+        }
+
+        /* Ẩn input file mặc định xấu xí */
+        #file-input {
+            display: none;
+        }
+
+        /* Style nút bấm như một cái Button xịn */
+        .upload-btn {
+            background-color: #333;
+            color: #fff;
+            padding: 10px 20px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .upload-btn:hover {
+            background-color: #555;
+        }
+
+        /* Container chứa SVG */
+        #svg-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #svg-container svg {
+            width: 90%;
+            height: 90%;
+            max-width: 90vw;
+            max-height: 90vh;
+        }
+
+        /* Hiệu ứng */
+        .smooth-path {
+            opacity: 0;
+            transition: opacity 0.1s ease-out; /* 0.1s transition theo yêu cầu */
+            will-change: opacity;
+        }
+
+        .smooth-path.active {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <label for="file-input" class="upload-btn">
+            📂 Chọn file SVG từ máy
+        </label>
+        <input type="file" id="file-input" accept=".svg">
+    </div>
+
+    <div id="svg-container"></div>
+
+    <script>
+        const container = document.getElementById('svg-container');
+        const fileInput = document.getElementById('file-input');
+        
+        // Biến lưu trữ ID của timeout để có thể hủy khi load file mới
+        let currentTimeoutId = null; 
+
+        fileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Đọc file từ máy user
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const svgText = e.target.result;
+                startDrawing(svgText);
+            };
+            reader.readAsText(file);
+        });
+
+        function startDrawing(svgText) {
+            // 1. Dọn dẹp: Hủy tiến trình vẽ cũ (nếu có) và xóa màn hình
+            if (currentTimeoutId) clearTimeout(currentTimeoutId);
+            container.innerHTML = '';
+
+            // 2. Parse SVG
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svgText, "image/svg+xml");
+            const svgElement = doc.querySelector('svg');
+
+            if (!svgElement) {
+                alert("File không hợp lệ hoặc không phải SVG chuẩn.");
+                return;
+            }
+
+            // 3. Chuẩn bị các path
+            const paths = svgElement.querySelectorAll('path, circle, rect, polygon, polyline, ellipse');
+            paths.forEach(path => {
+                path.classList.add('smooth-path');
+                // Tùy chọn: Reset màu về trắng/đen nếu cần
+                // path.style.stroke = '#fff';
+            });
+
+            // 4. Đưa vào màn hình
+            container.appendChild(svgElement);
+
+            // 5. Cấu hình tốc độ (Reset lại mỗi lần vẽ mới)
+            let index = 0;
+            let currentDelay = 1000; // Bắt đầu: 1 giây
+            const minDelay = 5;      // Tốc độ max
+            const acceleration = 0.95; // Gia tốc
+
+            // 6. Hàm chạy hiệu ứng
+            function animate() {
+                if (index >= paths.length) return;
+
+                // Hiện path
+                paths[index].classList.add('active');
+                index++;
+
+                // Tính delay mới
+                currentDelay = currentDelay * acceleration;
+                if (currentDelay < minDelay) currentDelay = minDelay;
+
+                // Đệ quy
+                currentTimeoutId = setTimeout(() => {
+                    requestAnimationFrame(animate);
+                }, currentDelay);
+            }
+
+            // Bắt đầu chạy
+            requestAnimationFrame(animate);
+        }
+    </script>
+</body>
+</html>
