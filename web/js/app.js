@@ -215,8 +215,8 @@ class Canvas {
 				let h = img.naturalHeight;
 
 				let computeScale = getScale(w, h, cfg.computeSize);
-				cfg.width = w / computeScale;
-				cfg.height = h / computeScale;
+				cfg.width = Math.max(1, Math.round(w / computeScale));
+				cfg.height = Math.max(1, Math.round(h / computeScale));
 
 				let viewScale = getScale(w, h, cfg.viewSize);
 
@@ -239,7 +239,7 @@ class Canvas {
 	static test(cfg) {
 		cfg.width = cfg.computeSize;
 		cfg.height = cfg.computeSize;
-		cfg.scale = 1;
+		cfg.scale = cfg.viewSize / cfg.computeSize;
 		let [w, h] = [cfg.width, cfg.height];
 
 		let canvas = new this(w, h);
@@ -313,6 +313,7 @@ class Canvas {
 	}
 }
 
+/* Shape: a geometric primitive with a bbox */
 class Shape {
 	static randomPoint(width, height) {
 		return [~~(Math.random()*width), ~~(Math.random()*height)];
@@ -629,33 +630,140 @@ const shapeMap = {
 	"smiley": Smiley
 };
 
-function fixRange(range) {
-	function sync() {
-		let value = range.value;
-		range.parentNode.querySelector(".value").innerHTML = value;
+const HEX_RE = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/* number of decimals implied by a step attribute ("0.05" => 2, "1" => 0, "any" => 2) */
+function decimals(input) {
+	let step = input.getAttribute("step");
+	if (!step || step == "any") { return 2; }
+	let dot = step.indexOf(".");
+	return (dot == -1 ? 0 : step.length - dot - 1);
+}
+
+function limits(input) {
+	let min = input.min === "" ? -Infinity : Number(input.min);
+	let max = input.max === "" ? Infinity : Number(input.max);
+	return {min, max};
+}
+
+/* read a number input; empty / invalid / out-of-range values are fixed to something valid */
+function readNumber(input) {
+	let {min, max} = limits(input);
+	let value = Number(input.value);
+	if (input.value.trim() === "" || !isFinite(value)) { value = Number(input.defaultValue); }
+	return clamp(value, min, max);
+}
+
+function formatNumber(input, value) {
+	if (input.getAttribute("step") == "any") { return String(parseFloat(value.toFixed(2))); }
+	return value.toFixed(decimals(input));
+}
+
+/* a slider (optional) and a number input that mirror each other */
+function bindNumber(number) {
+	let range = document.querySelector(`input[type=range][data-for=${number.name}]`);
+
+	function fromRange() {
+		number.value = formatNumber(number, Number(range.value));
 	}
 
-	range.oninput = sync;
+	function toRange() {
+		if (!range || number.value.trim() === "" || !isFinite(Number(number.value))) { return; }
+		range.value = number.value; /* the browser clamps to the slider's own min/max */
+	}
+
+	function normalize() {
+		let value = readNumber(number);
+		number.value = formatNumber(number, value);
+		toRange();
+	}
+
+	if (range) { range.addEventListener("input", fromRange); }
+	number.addEventListener("input", toRange);
+	number.addEventListener("change", normalize);
+	number.addEventListener("blur", normalize);
+	number.addEventListener("keydown", e => {
+		if (e.key == "Enter") { normalize(); }
+	});
+
+	normalize();
+}
+
+/* colour picker + hex text field */
+function bindColor() {
+	let picker = document.querySelector("[name='fill-color']");
+	let text = document.querySelector("[name='fill-hex']");
+	if (!picker || !text) { return; }
+
+	function expand(value) {
+		let match = value.trim().match(HEX_RE);
+		if (!match) { return null; }
+		let hex = match[1].toLowerCase();
+		if (hex.length == 3) { hex = hex.split("").map(c => c + c).join(""); }
+		return `#${hex}`;
+	}
+
+	picker.addEventListener("input", () => {
+		text.value = picker.value;
+		text.classList.remove("invalid");
+		selectFixed();
+	});
+
+	text.addEventListener("input", () => {
+		let hex = expand(text.value);
+		text.classList.toggle("invalid", !hex);
+		if (hex) { picker.value = hex; selectFixed(); }
+	});
+
+	text.addEventListener("blur", () => {
+		text.value = picker.value;
+		text.classList.remove("invalid");
+	});
+
+	text.value = picker.value;
+}
+
+/* touching the colour controls implies "use a fixed colour" */
+function selectFixed() {
+	let radio = document.querySelector("[name=fill][value=fixed]");
+	if (radio) { radio.checked = true; }
+}
+
+/* enable / disable the size-limit inputs together with their checkbox */
+function bindSizeLimit() {
+	let toggle = document.querySelector("[name=limitSize]");
+	let controls = Array.from(document.querySelectorAll("[data-size-limit]"));
+
+	function sync() {
+		controls.forEach(node => node.disabled = !toggle.checked);
+		toggle.closest(".limit").classList.toggle("on", toggle.checked);
+	}
+
+	toggle.addEventListener("change", sync);
 	sync();
 }
 
 function init$1() {
-	let ranges = document.querySelectorAll("[type=range]");
-	Array.from(ranges).forEach(fixRange);
+	let numbers = Array.from(document.querySelectorAll("input[type=number][name]"));
+	numbers.forEach(bindNumber);
+	bindColor();
+	bindSizeLimit();
 }
 
-function lock() {
-	/* fixme */
+/* lock the form while a run is in progress */
+function lock(locked) {
+	let form = document.querySelector("form");
+	form.classList.toggle("running", locked);
+	document.querySelector("#start").disabled = locked;
+	document.querySelector("#stop").disabled = !locked;
 }
-
-
 
 function getConfig() {
 	let form = document.querySelector("form");
 	let cfg = {};
 
 	numberFields.forEach(name => {
-		cfg[name] = Number(form.querySelector(`[name=${name}]`).value);
+		cfg[name] = readNumber(form.querySelector(`[name=${name}]`));
 	});
 
 	boolFields.forEach(name => {
@@ -672,12 +780,20 @@ function getConfig() {
 	let fillFields = Array.from(form.querySelectorAll(`[name=${fillField}]`));
 	fillFields.forEach(input => {
 		if (!input.checked) { return; }
-		
+
 		switch (input.value) {
 			case "auto": cfg.fill = "auto"; break;
 			case "fixed": cfg.fill = form.querySelector("[name='fill-color']").value; break;
 		}
 	});
+
+	/* target SVG file size, converted to bytes. 0 = no limit */
+	cfg.maxBytes = 0;
+	if (form.querySelector("[name=limitSize]").checked) {
+		let amount = readNumber(form.querySelector("[name=targetSize]"));
+		let unit = Number(form.querySelector("[name=targetUnit]").value);
+		cfg.maxBytes = Math.max(1, Math.floor(amount * unit));
+	}
 
 	return cfg;
 }
@@ -691,6 +807,7 @@ class State {
 	}
 }
 
+/* Step: a Shape, color and alpha */
 class Step {
 	constructor(shape, cfg) {
 		this.shape = shape;
@@ -752,13 +869,23 @@ class Optimizer {
 		this.cfg = cfg;
 		this.state = new State(original, Canvas.empty(cfg));
 		this._steps = 0;
+		this._stopped = false;
+		this._stopReason = "stopped";
 		this.onStep = () => {};
+		this.onFinish = () => {};
 		console.log("initial distance %s", this.state.distance);
 	}
 
 	start() {
 		this._ts = Date.now();
 		this._addShape();
+	}
+
+	/* ask the optimizer to stop before it starts the next shape */
+	stop(reason = "stopped") {
+		if (this._stopped) { return; }
+		this._stopped = true;
+		this._stopReason = reason;
 	}
 
 	_addShape() {
@@ -776,14 +903,21 @@ class Optimizer {
 	}
 
 	_continue() {
-		if (this._steps < this.cfg.steps) {
+		if (this._stopped) {
+			this._finish(this._stopReason);
+		} else if (this._steps < this.cfg.steps) {
 			setTimeout(() => this._addShape(), 10);
 		} else {
-			let time = Date.now() - this._ts;
-			console.log("target distance %s", this.state.distance);
-			console.log("real target distance %s", this.state.target.distance(this.state.canvas));
-			console.log("finished in %s", time);
+			this._finish("done");
 		}
+	}
+
+	_finish(reason) {
+		let time = Date.now() - this._ts;
+		console.log("target distance %s", this.state.distance);
+		console.log("real target distance %s", this.state.target.distance(this.state.canvas));
+		console.log("finished (%s) in %s", reason, time);
+		this.onFinish(reason);
 	}
 
 	_findBestStep() {
@@ -845,34 +979,92 @@ class Optimizer {
 const nodes = {
 	output: document.querySelector("#output"),
 	original: document.querySelector("#original"),
-	steps: document.querySelector("#steps"),
+	status: document.querySelector("#status"),
+	size: document.querySelector("#size-readout"),
+	meter: document.querySelector("#meter"),
+	meterBar: document.querySelector("#meter-bar"),
 	raster: document.querySelector("#raster"),
 	vector: document.querySelector("#vector"),
 	vectorText: document.querySelector("#vector-text"),
+	message: document.querySelector("#form-message"),
+	stop: document.querySelector("#stop"),
+	downloadSvg: document.querySelector("#download-svg"),
+	downloadPng: document.querySelector("#download-png"),
+	copySvg: document.querySelector("#copy-svg"),
 	types: Array.from(document.querySelectorAll("#output [name=type]"))
 };
 
-let steps;
+const encoder = new TextEncoder();
+
+let current = null; /* the optimizer that is currently running */
+let resultCanvas = null;
+let shapeCount = 0;
+
+/* real size of a string once saved as a UTF-8 file */
+function byteLength(str) {
+	return encoder.encode(str).length;
+}
+
+function formatBytes(bytes) {
+	if (bytes < 1024) { return `${bytes} B`; }
+	if (bytes < 1024*1024) { return `${(bytes/1024).toFixed(2)} KB`; }
+	return `${(bytes/(1024*1024)).toFixed(2)} MB`;
+}
+
+function showMessage(text) {
+	nodes.message.textContent = text;
+	nodes.message.hidden = !text;
+}
+
+function setExportEnabled(enabled) {
+	[nodes.downloadSvg, nodes.downloadPng, nodes.copySvg].forEach(button => button.disabled = !enabled);
+}
+
+function updateProgress(fraction) {
+	let percent = Math.round(100 * Math.min(1, Math.max(0, fraction)));
+	nodes.meter.setAttribute("aria-valuenow", percent);
+	nodes.meterBar.style.width = `${percent}%`;
+}
+
+function describe(reason, cfg, bytes) {
+	switch (reason) {
+		case "size":
+			if (!shapeCount) { return "Giới hạn dung lượng quá nhỏ: chưa thêm được hình nào."; }
+			return `Đã dừng vì đạt giới hạn dung lượng ${formatBytes(cfg.maxBytes)}.`;
+		case "stopped": return "Đã dừng theo yêu cầu.";
+		default: return `Hoàn tất: đã chạy đủ ${cfg.steps} lượt.`;
+	}
+}
 
 function go(original, cfg) {
-	lock();
+	lock(true);
+	showMessage("");
+	setExportEnabled(false);
 
-	nodes.steps.innerHTML = "";
+	nodes.status.textContent = "";
+	nodes.size.textContent = "";
 	nodes.original.innerHTML = "";
 	nodes.raster.innerHTML = "";
 	nodes.vector.innerHTML = "";
 	nodes.vectorText.value = "";
+	updateProgress(0);
 
-	nodes.output.style.display = "";
+	nodes.output.hidden = false;
 	nodes.original.appendChild(original.node);
 
 	let optimizer = new Optimizer(original, cfg);
-	steps = 0;
+	current = optimizer;
+	shapeCount = 0;
 
-	let cfg2 = Object.assign({}, cfg, {width:cfg.scale*cfg.width, height:cfg.scale*cfg.height});
+	/* the viewing size can be tiny, but a canvas / svg must stay at least 1px */
+	let cfg2 = Object.assign({}, cfg, {
+		width: Math.max(1, Math.round(cfg.scale*cfg.width)),
+		height: Math.max(1, Math.round(cfg.scale*cfg.height))
+	});
 	let result = Canvas.empty(cfg2, false);
 	result.ctx.scale(cfg.scale, cfg.scale);
 	nodes.raster.appendChild(result.node);
+	resultCanvas = result;
 
 	let svg = Canvas.empty(cfg, true);
 	svg.setAttribute("width", cfg2.width);
@@ -880,23 +1072,67 @@ function go(original, cfg) {
 	nodes.vector.appendChild(svg);
 
 	let serializer = new XMLSerializer();
+	let bytes = byteLength(serializer.serializeToString(svg));
+	let similarity = null;
+
+	function renderStatus() {
+		let text = `${shapeCount} hình`;
+		if (similarity !== null) { text += `, giống ${similarity}%`; }
+		nodes.status.textContent = text;
+
+		let size = `Dung lượng SVG: ${formatBytes(bytes)}`;
+		if (cfg.maxBytes) { size += ` / ${formatBytes(cfg.maxBytes)}`; }
+		nodes.size.textContent = size;
+
+		let byShapes = shapeCount / cfg.steps;
+		let bySize = (cfg.maxBytes ? bytes / cfg.maxBytes : 0);
+		updateProgress(Math.max(byShapes, bySize));
+	}
 
 	optimizer.onStep = (step) => {
-		if (step) {
-			result.drawStep(step);
-			svg.appendChild(step.toSVG());
-			let percent = (100*(1-step.distance)).toFixed(2);
-			nodes.vectorText.value = serializer.serializeToString(svg);
-			nodes.steps.innerHTML = `(${++steps} of ${cfg.steps}, ${percent}% similar)`;
+		if (!step) { return; } /* discarded: the shape did not improve the image */
+
+		let node = step.toSVG();
+		svg.appendChild(node);
+		let text = serializer.serializeToString(svg);
+		let newBytes = byteLength(text);
+
+		if (cfg.maxBytes && newBytes > cfg.maxBytes) {
+			/* this shape would push the file over the target: drop it and stop here */
+			svg.removeChild(node);
+			optimizer.stop("size");
+			return;
 		}
+
+		bytes = newBytes;
+		shapeCount++;
+		similarity = (100*(1-step.distance)).toFixed(2);
+		result.drawStep(step);
+		nodes.vectorText.value = text;
+		renderStatus();
 	};
+
+	optimizer.onFinish = (reason) => {
+		current = null;
+		lock(false);
+
+		renderStatus();
+		if (reason == "done" || reason == "size") { updateProgress(1); }
+
+		nodes.vectorText.value = serializer.serializeToString(svg);
+		setExportEnabled(shapeCount > 0);
+		showMessage(describe(reason, cfg, bytes));
+	};
+
+	renderStatus();
 	optimizer.start();
 
-	document.documentElement.scrollTop = document.documentElement.scrollHeight;
+	nodes.output.scrollIntoView({block: "start"});
 }
 
 function onSubmit(e) {
 	e.preventDefault();
+	if (current) { return; }
 
 	let inputFile = document.querySelector("input[type=file]");
 	let inputUrl = document.querySelector("input[name=url]");
@@ -911,19 +1147,68 @@ function onSubmit(e) {
 
 	let cfg = getConfig();
 
+	if (!cfg.shapeTypes.length) {
+		showMessage("Hãy chọn ít nhất một loại hình.");
+		return;
+	}
+
+	showMessage("");
 	Canvas.original(url, cfg).then(original => go(original, cfg));
 }
 
+function download(blob, name) {
+	let a = document.createElement("a");
+	a.href = URL.createObjectURL(blob);
+	a.download = name;
+	document.body.appendChild(a);
+	a.click();
+	a.remove();
+	setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function onDownloadSvg() {
+	let blob = new Blob([nodes.vectorText.value], {type: "image/svg+xml;charset=utf-8"});
+	download(blob, `primitive-${shapeCount}-hinh.svg`);
+}
+
+function onDownloadPng() {
+	if (!resultCanvas) { return; }
+	resultCanvas.node.toBlob(blob => download(blob, `primitive-${shapeCount}-hinh.png`), "image/png");
+}
+
+function onCopySvg() {
+	let text = nodes.vectorText.value;
+	let done = () => {
+		nodes.copySvg.textContent = "Đã sao chép";
+		setTimeout(() => nodes.copySvg.textContent = "Sao chép SVG", 1500);
+	};
+
+	if (navigator.clipboard && navigator.clipboard.writeText) {
+		navigator.clipboard.writeText(text).then(done);
+	} else {
+		nodes.vectorText.select();
+		document.execCommand("copy");
+		done();
+	}
+}
+
 function init$$1() {
-	nodes.output.style.display = "none";
+	nodes.output.hidden = true;
 	nodes.types.forEach(input => input.addEventListener("click", syncType));
 	init$1();
+	lock(false);
+	setExportEnabled(false);
 	syncType();
+
 	document.querySelector("form").addEventListener("submit", onSubmit);
+	nodes.stop.addEventListener("click", () => current && current.stop("stopped"));
+	nodes.downloadSvg.addEventListener("click", onDownloadSvg);
+	nodes.downloadPng.addEventListener("click", onDownloadPng);
+	nodes.copySvg.addEventListener("click", onCopySvg);
 }
 
 function syncType() {
-	nodes.output.className = "";
+	nodes.output.classList.remove("raster", "vector");
 	nodes.types.forEach(input => {
 		if (input.checked) { nodes.output.classList.add(input.value); }
 	});

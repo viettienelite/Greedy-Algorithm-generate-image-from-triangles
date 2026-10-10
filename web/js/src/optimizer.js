@@ -8,13 +8,23 @@ export default class Optimizer {
 		this.cfg = cfg;
 		this.state = new State(original, Canvas.empty(cfg));
 		this._steps = 0;
+		this._stopped = false;
+		this._stopReason = "stopped";
 		this.onStep = () => {};
+		this.onFinish = () => {};
 		console.log("initial distance %s", this.state.distance);
 	}
 
 	start() {
 		this._ts = Date.now();
 		this._addShape();
+	}
+
+	/* ask the optimizer to stop before it starts the next shape */
+	stop(reason = "stopped") {
+		if (this._stopped) { return; }
+		this._stopped = true;
+		this._stopReason = reason;
 	}
 
 	_addShape() {
@@ -32,14 +42,21 @@ export default class Optimizer {
 	}
 
 	_continue() {
-		if (this._steps < this.cfg.steps) {
+		if (this._stopped) {
+			this._finish(this._stopReason);
+		} else if (this._steps < this.cfg.steps) {
 			setTimeout(() => this._addShape(), 10);
 		} else {
-			let time = Date.now() - this._ts;
-			console.log("target distance %s", this.state.distance);
-			console.log("real target distance %s", this.state.target.distance(this.state.canvas));
-			console.log("finished in %s", time);
+			this._finish("done");
 		}
+	}
+
+	_finish(reason) {
+		let time = Date.now() - this._ts;
+		console.log("target distance %s", this.state.distance);
+		console.log("real target distance %s", this.state.target.distance(this.state.canvas));
+		console.log("finished (%s) in %s", reason, time);
+		this.onFinish(reason);
 	}
 
 	_findBestStep() {

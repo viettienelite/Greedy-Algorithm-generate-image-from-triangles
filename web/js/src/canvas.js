@@ -82,8 +82,8 @@ export default class Canvas {
 				let h = img.naturalHeight;
 
 				let computeScale = getScale(w, h, cfg.computeSize);
-				cfg.width = w / computeScale;
-				cfg.height = h / computeScale;
+				cfg.width = Math.max(1, Math.round(w / computeScale));
+				cfg.height = Math.max(1, Math.round(h / computeScale));
 
 				let viewScale = getScale(w, h, cfg.viewSize);
 
@@ -106,7 +106,7 @@ export default class Canvas {
 	static test(cfg) {
 		cfg.width = cfg.computeSize;
 		cfg.height = cfg.computeSize;
-		cfg.scale = 1;
+		cfg.scale = cfg.viewSize / cfg.computeSize;
 		let [w, h] = [cfg.width, cfg.height];
 
 		let canvas = new this(w, h);

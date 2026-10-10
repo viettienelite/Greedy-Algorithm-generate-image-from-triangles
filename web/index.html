@@ -1,97 +1,185 @@
 <!doctype html>
-<html>
+<html lang="vi">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="stylesheet" href="css/app.css" />
-		<title>primitive.js &ndash; drawing images with geometric primitives</title>
+		<title>primitive.js &ndash; vẽ lại ảnh bằng các hình học cơ bản</title>
 	</head>
 
 	<body>
-		<p><img src="logo.png" alt="Logo" /></p>
-		<h1>primitive.js</h1>
-		<p>This is a JavaScript port of the <a href="https://primitive.lol">https://primitive.lol</a> app, originally created by Michael Fogleman. Its purpose is to re-draw existing images using only primitive geometric shapes.</p>
-		<p>You can find some additional (technical) information in the <a href="https://github.com/ondras/primitive.js">GitHub repository</a>. This page acts as a small demo where you can experiment with the algorithm.</p>
-		
-		<h2>Try it in your browser!</h2>
-		<form>
-			<h3>Pick an image file</h3>
-			<ul>
-				<li>From your computer: <input type="file" /></li>
-				<li>From URL (must be <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_enabled_image">CORS-enabled</a>): <input type="url" name="url" /></li>
-			</ul>
-			<h3>Check or adjust various rendering options</h3>
+		<header class="top">
+			<img src="logo.png" alt="" width="56" height="56" onerror="this.remove()" />
 			<div>
-				<p>Add <span class="value"></span> geometric shapes
-					<em>(large number: better results, slower)</em>
-				</p>
-				<input name="steps" type="range" min="1" max="1500" value="50" />
+				<h1>primitive.js</h1>
+				<p>Vẽ lại một bức ảnh chỉ bằng tam giác, chữ nhật, elip&hellip; Bản JavaScript của <a href="https://primitive.lol">primitive.lol</a> (Michael Fogleman). Xem thêm trên <a href="https://github.com/ondras/primitive.js">GitHub</a>.</p>
 			</div>
-			<div>
-				<p>Use these shape types:</p>
-				<label><input type="checkbox" name="shapeType" value="triangle" checked="checked" />Triangles</label><br/>
-				<label><input type="checkbox" name="shapeType" value="rectangle" />Rectangles</label><br/>
-				<label><input type="checkbox" name="shapeType" value="ellipse" />Ellipses</label><br/>
-				<label><input type="checkbox" name="shapeType" value="smiley" />Smileys</label>
-			</div>
-			<div>
-				<p>Fill background with:</p>
-				<label><input type="radio" name="fill" value="auto" checked="checked" />an auto-detected color</label><br/>
-				<label><input type="radio" name="fill" value="fixed" />a fixed color: </label>
-				<input type="color" value="#ffffff" name="fill-color" />
-			</div>
-			<div>
-				<p>Starting opacity: <span class="value"></span></p>
-				<input name="alpha" type="range" min="0" max="1" step="0.1" value="0.5" /><br/>
-				<label><input type="checkbox" name="mutateAlpha" checked="checked" />Adjust opacity automatically</label>
-			</div>
-			<div>
-				<p>Computation size: <span class="value"></span> pixels
-					<em>(smaller is faster)</em>
-				</p>
-				<input name="computeSize" type="range" min="128" max="512" value="256" /><br/>
-			</div>
-			<div>
-				<p>Viewing size: <span class="value"></span> pixels</p>
-				<input name="viewSize" type="range" min="256" max="2048" value="512" />
-			</div>
-			<div>
-				<p>Start every iteration with <span class="value"></span> random shapes
-					<em>(larger number: more precise results, slower)</em>
-				</p>
-				<input name="shapes" type="range" min="1" max="1000" value="200" />
-			</div>
-			<div>
-				<p>Stop shape optimization after <span class="value"></span> failures
-					<em>(larger number: more precise results, slower)</em>
-				</p>
-				<input name="mutations" type="range" min="0" max="100" value="30" />
-			</div>
+		</header>
 
-			<h3>Hit the button to start</h3>
-			<p>This is a CPU-intensive process. It might take a while.</p>
-			<input type="submit" value="Let's go!" />
-		</form>
+		<div class="layout">
+			<form class="panel" autocomplete="off">
+				<div class="panel-scroll">
 
-		<section id="output">
-			<div>
-				<h3>Original</h3>
-				<div id="original"></div>
-			</div>
-			<div>
-				<h3>Result <span id="steps"></span></h3>
-				<div class="raster" id="raster"></div>
-				<div class="vector" id="vector"></div>
-				<label><input type="radio" name="type" value="raster" checked="checked" />Raster image: right-click to save</label><br/>
-				<label><input type="radio" name="type" value="vector" />Vector image: copy&amp;paste data from the text area below</label><br/>
-				<textarea class="vector" id="vector-text" spellcheck="false"></textarea>
-			</div>
-		</section>
+					<fieldset>
+						<legend>Ảnh nguồn</legend>
+						<label class="field">Chọn từ máy tính
+							<input type="file" accept="image/*" />
+						</label>
+						<label class="field">Hoặc dán URL ảnh <span class="hint">(phải bật <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_enabled_image">CORS</a>)</span>
+							<input type="url" name="url" placeholder="https://" />
+						</label>
+						<p class="hint">Nếu không chọn ảnh nào, ảnh thử (3 chấm màu) sẽ được dùng.</p>
+					</fieldset>
+
+					<fieldset class="limit">
+						<legend>Dung lượng file SVG</legend>
+						<label class="check">
+							<input type="checkbox" name="limitSize" />
+							Dừng thêm hình khi file SVG đạt dung lượng mục tiêu
+						</label>
+						<div class="size-row">
+							<input type="number" name="targetSize" min="0.01" max="1048576" step="any" value="100" data-size-limit aria-label="Dung lượng mục tiêu" />
+							<select name="targetUnit" data-size-limit aria-label="Đơn vị">
+								<option value="1">B</option>
+								<option value="1024" selected>KB</option>
+								<option value="1048576">MB</option>
+							</select>
+						</div>
+						<p class="hint">Tính theo đúng nội dung file SVG sẽ lưu (UTF-8, 1 KB = 1024 B). Hình nào làm file vượt mục tiêu sẽ không được thêm vào. Khi bật mục này, &ldquo;số hình tối đa&rdquo; bên dưới chỉ còn là mức trần.</p>
+					</fieldset>
+
+					<fieldset>
+						<legend>Hình dạng và nền</legend>
+						<div class="chips">
+							<label class="chip"><input type="checkbox" name="shapeType" value="triangle" checked="checked" />Tam giác</label>
+							<label class="chip"><input type="checkbox" name="shapeType" value="rectangle" />Chữ nhật</label>
+							<label class="chip"><input type="checkbox" name="shapeType" value="ellipse" />Elip</label>
+							<label class="chip"><input type="checkbox" name="shapeType" value="smiley" />Mặt cười</label>
+						</div>
+						<div class="fill">
+							<p class="field-title">Tô nền bằng</p>
+							<label class="check"><input type="radio" name="fill" value="auto" checked="checked" />Màu tự nhận từ viền ảnh</label>
+							<label class="check"><input type="radio" name="fill" value="fixed" />Màu cố định</label>
+							<div class="color-row">
+								<input type="color" value="#ffffff" name="fill-color" aria-label="Chọn màu nền" />
+								<input type="text" name="fill-hex" class="hex" maxlength="7" spellcheck="false" aria-label="Mã màu nền (hex)" />
+							</div>
+						</div>
+					</fieldset>
+
+					<fieldset>
+						<legend>Thông số</legend>
+
+						<div class="param">
+							<label class="param-label" for="steps">Số hình tối đa</label>
+							<div class="param-input">
+								<input type="range" data-for="steps" min="1" max="1500" value="50" aria-label="Số hình tối đa (thanh trượt)" />
+								<input type="number" id="steps" name="steps" min="1" max="10000" step="1" value="50" />
+								<span class="unit">hình</span>
+							</div>
+							<p class="hint">Nhiều hơn: ảnh chi tiết hơn nhưng chạy lâu hơn.</p>
+						</div>
+
+						<div class="param">
+							<label class="param-label" for="alpha">Độ đục ban đầu</label>
+							<div class="param-input">
+								<input type="range" data-for="alpha" min="0.05" max="1" step="0.01" value="0.5" aria-label="Độ đục ban đầu (thanh trượt)" />
+								<input type="number" id="alpha" name="alpha" min="0.05" max="1" step="0.01" value="0.5" />
+								<span class="unit">0&ndash;1</span>
+							</div>
+							<label class="check"><input type="checkbox" name="mutateAlpha" checked="checked" />Tự điều chỉnh độ đục</label>
+						</div>
+
+						<div class="param">
+							<label class="param-label" for="computeSize">Kích thước tính toán</label>
+							<div class="param-input">
+								<input type="range" data-for="computeSize" min="128" max="512" value="256" aria-label="Kích thước tính toán (thanh trượt)" />
+								<input type="number" id="computeSize" name="computeSize" min="16" max="1024" step="1" value="256" />
+								<span class="unit">px</span>
+							</div>
+							<p class="hint">Nhỏ hơn: chạy nhanh hơn.</p>
+						</div>
+
+						<div class="param">
+							<label class="param-label" for="viewSize">Kích thước hiển thị</label>
+							<div class="param-input">
+								<input type="range" data-for="viewSize" min="10" max="2048" value="512" aria-label="Kích thước hiển thị (thanh trượt)" />
+								<input type="number" id="viewSize" name="viewSize" min="10" max="8192" step="1" value="512" />
+								<span class="unit">px</span>
+							</div>
+							<p class="hint">Tối thiểu 10 px. Chỉ ảnh lớn hơn mức này mới bị thu nhỏ.</p>
+						</div>
+
+						<div class="param">
+							<label class="param-label" for="shapes">Số hình thử mỗi lượt</label>
+							<div class="param-input">
+								<input type="range" data-for="shapes" min="1" max="1000" value="200" aria-label="Số hình thử mỗi lượt (thanh trượt)" />
+								<input type="number" id="shapes" name="shapes" min="1" max="5000" step="1" value="200" />
+								<span class="unit">hình</span>
+							</div>
+							<p class="hint">Nhiều hơn: chính xác hơn nhưng chậm hơn.</p>
+						</div>
+
+						<div class="param">
+							<label class="param-label" for="mutations">Ngừng tinh chỉnh sau số lần thất bại</label>
+							<div class="param-input">
+								<input type="range" data-for="mutations" min="0" max="100" value="30" aria-label="Số lần thất bại (thanh trượt)" />
+								<input type="number" id="mutations" name="mutations" min="0" max="1000" step="1" value="30" />
+								<span class="unit">lần</span>
+							</div>
+							<p class="hint">Nhiều hơn: chính xác hơn nhưng chậm hơn.</p>
+						</div>
+					</fieldset>
+
+				</div>
+
+				<div class="actions">
+					<p id="form-message" role="status" hidden></p>
+					<div class="buttons">
+						<button type="submit" id="start" class="primary">Bắt đầu vẽ</button>
+						<button type="button" id="stop" disabled>Dừng</button>
+					</div>
+					<p class="hint">Quá trình dùng nhiều CPU và có thể mất một lúc.</p>
+				</div>
+			</form>
+
+			<section id="output" class="raster" hidden>
+				<div class="compare">
+					<figure class="pane">
+						<figcaption>Ảnh gốc</figcaption>
+						<div id="original"></div>
+					</figure>
+					<figure class="pane">
+						<figcaption>Kết quả</figcaption>
+						<div class="raster" id="raster"></div>
+						<div class="vector" id="vector"></div>
+					</figure>
+				</div>
+
+				<div class="progress">
+					<div id="meter" role="progressbar" aria-label="Tiến độ" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="meter-bar"></div></div>
+					<p class="readout"><span id="status"></span><span id="size-readout"></span></p>
+				</div>
+
+				<div class="tabs" role="radiogroup" aria-label="Kiểu hiển thị kết quả">
+					<label><input type="radio" name="type" value="raster" checked="checked" />Ảnh raster</label>
+					<label><input type="radio" name="type" value="vector" />Ảnh vector (SVG)</label>
+				</div>
+
+				<textarea class="vector" id="vector-text" spellcheck="false" aria-label="Mã nguồn SVG"></textarea>
+
+				<div class="exports">
+					<button type="button" id="download-svg" disabled>Tải SVG</button>
+					<button type="button" id="download-png" disabled>Tải PNG</button>
+					<button type="button" id="copy-svg" disabled>Sao chép SVG</button>
+				</div>
+			</section>
+		</div>
 
 		<footer>
 			&copy; 2016 <a href="https://ondras.zarovi.cz/">Ondřej Žára</a>, <a href="https://github.com/ondras/primitive.js">GitHub repository</a>
 		</footer>
-		
+
 		<script src="js/app.js"></script>
 	</body>
 </html>
